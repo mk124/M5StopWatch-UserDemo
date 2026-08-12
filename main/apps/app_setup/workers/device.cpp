@@ -112,10 +112,6 @@ private:
 
     void updateValueLabel(int value)
     {
-        if (!_value_label) {
-            return;
-        }
-
         char buffer[4] = {};
         std::snprintf(buffer, sizeof(buffer), "%d", value);
         _value_label->setText(buffer);
@@ -184,7 +180,6 @@ private:
         auto row = std::make_unique<Container>(_panel->get());
         row->setSize(374, 119);
         row->align(LV_ALIGN_TOP_MID, 0, y);
-        row->setBgColor(lv_color_hex(0x4C4C4C));
         row->setBorderWidth(0);
         row->setShadowWidth(0);
         row->setRadius(60);
@@ -209,9 +204,11 @@ private:
         lv_obj_set_style_bg_opa(switch_widget->get(), LV_OPA_COVER, LV_PART_KNOB);
         lv_obj_set_style_border_width(switch_widget->get(), 0, LV_PART_KNOB);
         lv_obj_set_style_radius(switch_widget->get(), LV_RADIUS_CIRCLE, LV_PART_KNOB);
-        switch_widget->setBgColor(lv_color_hex(0x53BD65), LV_PART_INDICATOR | LV_STATE_CHECKED);
-        switch_widget->setBgOpa(LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_CHECKED);
-        switch_widget->setBorderWidth(0, LV_PART_INDICATOR | LV_STATE_CHECKED);
+        constexpr lv_style_selector_t checked_indicator =
+            static_cast<lv_style_selector_t>(LV_PART_INDICATOR) | LV_STATE_CHECKED;
+        switch_widget->setBgColor(lv_color_hex(0x53BD65), checked_indicator);
+        switch_widget->setBgOpa(LV_OPA_COVER, checked_indicator);
+        switch_widget->setBorderWidth(0, checked_indicator);
         switch_widget->onValueChanged().connect(onChanged);
 
         _labels.push_back(std::move(label));
@@ -240,20 +237,18 @@ BrightnessWorker::BrightnessWorker()
 
 void BrightnessWorker::update()
 {
-    if (_view && _applied_brightness != _view->currentValue()) {
+    if (_applied_brightness != _view->currentValue()) {
         GetHAL().setBackLightBrightness(_view->currentValue(), false);
         _applied_brightness = _view->currentValue();
     }
 
-    if (_view && _view->consumeSaveRequested()) {
+    if (_view->consumeSaveRequested()) {
         GetHAL().setBackLightBrightness(_view->currentValue(), true);
         _is_done = true;
     }
 }
 
-BrightnessWorker::~BrightnessWorker()
-{
-}
+BrightnessWorker::~BrightnessWorker() = default;
 
 VolumeWorker::VolumeWorker()
 {
@@ -265,20 +260,18 @@ VolumeWorker::VolumeWorker()
 
 void VolumeWorker::update()
 {
-    if (_view && _applied_volume != _view->currentValue()) {
+    if (_applied_volume != _view->currentValue()) {
         GetHAL().setSpeakerVolume(_view->currentValue(), false);
         _applied_volume = _view->currentValue();
     }
 
-    if (_view && _view->consumeSaveRequested()) {
+    if (_view->consumeSaveRequested()) {
         GetHAL().setSpeakerVolume(_view->currentValue(), true);
         _is_done = true;
     }
 }
 
-VolumeWorker::~VolumeWorker()
-{
-}
+VolumeWorker::~VolumeWorker() = default;
 
 ButtonWorker::ButtonWorker()
 {
@@ -290,18 +283,16 @@ ButtonWorker::ButtonWorker()
 
 void ButtonWorker::update()
 {
-    if (_view && (_applied_config.sfxEnabled != _view->currentConfig().sfxEnabled ||
-                  _applied_config.vibrateEnabled != _view->currentConfig().vibrateEnabled)) {
+    if (_applied_config.sfxEnabled != _view->currentConfig().sfxEnabled ||
+        _applied_config.vibrateEnabled != _view->currentConfig().vibrateEnabled) {
         GetHAL().setButtonConfig(_view->currentConfig(), false);
         _applied_config = _view->currentConfig();
     }
 
-    if (_view && _view->consumeSaveRequested()) {
+    if (_view->consumeSaveRequested()) {
         GetHAL().setButtonConfig(_view->currentConfig(), true);
         _is_done = true;
     }
 }
 
-ButtonWorker::~ButtonWorker()
-{
-}
+ButtonWorker::~ButtonWorker() = default;

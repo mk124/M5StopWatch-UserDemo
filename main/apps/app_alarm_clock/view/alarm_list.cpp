@@ -5,8 +5,7 @@
  */
 #include "view.h"
 #include <assets/assets.h>
-#include <mooncake_log.h>
-#include <cstdio>
+#include <fmt/format.h>
 
 using namespace view;
 using namespace uitk::lvgl_cpp;
@@ -44,9 +43,6 @@ std::string format_alarm_time(const model::AlarmClock::Time24& time)
 
 void DeleteAlarmDialog::init(lv_obj_t* parent)
 {
-    _is_confirmed = false;
-    _is_cancelled = false;
-
     _panel = std::make_unique<Container>(parent);
     _panel->align(LV_ALIGN_CENTER, 0, 0);
     _panel->setSize(_dialog_width, _dialog_height);
@@ -116,11 +112,7 @@ void AlarmListView::update()
     }
 
     if (_delete_dialog->isConfirmed()) {
-        if (_pending_delete_alarm_id >= 0) {
-            _alarm_clock.removeAlarm(_pending_delete_alarm_id);
-        }
-        _delete_dialog.reset();
-        _pending_delete_alarm_id = -1;
+        _alarm_clock.removeAlarm(_pending_delete_alarm_id);
         rebuild();
         return;
     }
@@ -200,9 +192,11 @@ void AlarmListView::createAlarmRow(int y, int alarmId, const model::AlarmClock::
     lv_obj_set_style_bg_opa(row->enabledSwitch->get(), LV_OPA_COVER, LV_PART_KNOB);
     lv_obj_set_style_border_width(row->enabledSwitch->get(), 0, LV_PART_KNOB);
     lv_obj_set_style_radius(row->enabledSwitch->get(), LV_RADIUS_CIRCLE, LV_PART_KNOB);
-    row->enabledSwitch->setBgColor(lv_color_hex(_switch_on_color), LV_PART_INDICATOR | LV_STATE_CHECKED);
-    row->enabledSwitch->setBgOpa(LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    row->enabledSwitch->setBorderWidth(0, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    constexpr lv_style_selector_t checked_indicator =
+        static_cast<lv_style_selector_t>(LV_PART_INDICATOR) | LV_STATE_CHECKED;
+    row->enabledSwitch->setBgColor(lv_color_hex(_switch_on_color), checked_indicator);
+    row->enabledSwitch->setBgOpa(LV_OPA_COVER, checked_indicator);
+    row->enabledSwitch->setBorderWidth(0, checked_indicator);
     row->enabledSwitch->onValueChanged().connect(
         [this, alarmId](bool enabled) { _alarm_clock.setAlarmEnabled(alarmId, enabled); });
 
@@ -229,8 +223,6 @@ void AlarmListView::createAddButton(int y)
 
 void AlarmListView::showDeleteDialog(int alarmId)
 {
-    _delete_dialog.reset();
-
     _pending_delete_alarm_id = alarmId;
 
     _delete_dialog = std::make_unique<DeleteAlarmDialog>();
@@ -240,7 +232,7 @@ void AlarmListView::showDeleteDialog(int alarmId)
 AlarmListView::AlarmRow* AlarmListView::findRow(lv_obj_t* target)
 {
     for (auto& row : _rows) {
-        if (row->button && row->button->get() == target) {
+        if (row->button->get() == target) {
             return row.get();
         }
     }
@@ -250,11 +242,7 @@ AlarmListView::AlarmRow* AlarmListView::findRow(lv_obj_t* target)
 void AlarmListView::handleAlarmButtonLongPressed(lv_event_t* e)
 {
     auto* self = static_cast<AlarmListView*>(lv_event_get_user_data(e));
-    if (self == nullptr) {
-        return;
-    }
-
-    auto* row = self->findRow(lv_event_get_target_obj(e));
+    auto* row  = self->findRow(lv_event_get_target_obj(e));
     if (row == nullptr) {
         return;
     }

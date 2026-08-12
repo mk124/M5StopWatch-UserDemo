@@ -7,7 +7,6 @@
 #include "utils/settings/settings.h"
 #include <algorithm>
 #include <cmath>
-#include <memory>
 #include <mooncake_log.h>
 #include <driver/i2s_std.h>
 #include <esp_dsp.h>
@@ -34,34 +33,32 @@ public:
 
     void init(i2c_master_bus_handle_t i2c_bus)
     {
-        _silence_buffer.resize(sample_rate * 0.1);
-        _silence_buffer.assign(_silence_buffer.size(), 0);
+        _silence_buffer.assign(sample_rate / 10, 0);
         _spectrum_init();
         xTaskCreate([](void* obj) { static_cast<AudioCodec*>(obj)->_task_entry(); }, "audio_task", 4 * 1024, this, 5,
                     &_task_handle);
 
         _i2s_init();
 
-        audio_codec_i2s_cfg_t i2s_cfg = {
-            .rx_handle = _rx_handle,
-            .tx_handle = _tx_handle,
-        };
-        _data_if = audio_codec_new_i2s_data(&i2s_cfg);
+        audio_codec_i2s_cfg_t i2s_cfg{};
+        i2s_cfg.rx_handle = _rx_handle;
+        i2s_cfg.tx_handle = _tx_handle;
+        _data_if          = audio_codec_new_i2s_data(&i2s_cfg);
 
-        audio_codec_i2c_cfg_t i2c_cfg = {.addr = ES8311_CODEC_DEFAULT_ADDR, .bus_handle = i2c_bus};
-        _ctrl_if                      = audio_codec_new_i2c_ctrl(&i2c_cfg);
+        audio_codec_i2c_cfg_t i2c_cfg{};
+        i2c_cfg.addr       = ES8311_CODEC_DEFAULT_ADDR;
+        i2c_cfg.bus_handle = i2c_bus;
+        _ctrl_if           = audio_codec_new_i2c_ctrl(&i2c_cfg);
 
         _gpio_if = audio_codec_new_gpio();
 
-        es8311_codec_cfg_t es8311_cfg = {
-            .ctrl_if     = _ctrl_if,
-            .gpio_if     = _gpio_if,
-            .codec_mode  = ESP_CODEC_DEV_WORK_MODE_BOTH,
-            .pa_pin      = GPIO_NUM_NC,
-            .pa_reverted = false,
-            .use_mclk    = true,
-        };
-        _codec_if = es8311_codec_new(&es8311_cfg);
+        es8311_codec_cfg_t es8311_cfg{};
+        es8311_cfg.ctrl_if    = _ctrl_if;
+        es8311_cfg.gpio_if    = _gpio_if;
+        es8311_cfg.codec_mode = ESP_CODEC_DEV_WORK_MODE_BOTH;
+        es8311_cfg.pa_pin     = GPIO_NUM_NC;
+        es8311_cfg.use_mclk   = true;
+        _codec_if             = es8311_codec_new(&es8311_cfg);
 
         esp_codec_dev_cfg_t dev_cfg = {
             .dev_type = ESP_CODEC_DEV_TYPE_IN_OUT,
@@ -72,11 +69,10 @@ public:
 
         esp_codec_dev_set_in_gain(_codec_dev, 30.0);
 
-        esp_codec_dev_sample_info_t fs = {
-            .bits_per_sample = 16,
-            .channel         = 1,
-            .sample_rate     = sample_rate,
-        };
+        esp_codec_dev_sample_info_t fs{};
+        fs.bits_per_sample = 16;
+        fs.channel         = 1;
+        fs.sample_rate     = sample_rate;
         esp_codec_dev_open(_codec_dev, &fs);
     }
 
@@ -140,7 +136,7 @@ public:
 
         esp_codec_dev_set_in_gain(_codec_dev, gain);
 
-        size_t sample_count = (size_t)(sample_rate * durationMs / 1000);
+        size_t sample_count = static_cast<size_t>(sample_rate) * durationMs / 1000;
         size_t byte_size    = sample_count * sizeof(int16_t);
 
         data.resize(sample_count);
@@ -170,31 +166,23 @@ private:
                         _is_playing = false;
                         break;
                     }
-                    current_data = _audio_data;
+                    current_data = std::move(_audio_data);
                     _audio_data.clear();
-                    _is_playing = true;
                 }
 
-                if (current_data.empty()) {
-                    break;
-                }
-
-                size_t offset        = 0;
-                size_t total_samples = current_data.size();
-                bool interrupted     = false;
-                // Chunk size in samples (e.g. 1024 bytes = 512 samples)
-                const size_t CHUNK_SAMPLES = 512;
+                size_t offset                  = 0;
+                size_t total_samples           = current_data.size();
+                bool interrupted               = false;
+                constexpr size_t chunk_samples = 512;
 
                 while (offset < total_samples) {
                     // Check for interruption (new play request)
                     if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
-                        // mclog::tagInfo(_tag, "playback interrupted");
                         interrupted = true;
                         break;
                     }
 
-                    size_t remain        = total_samples - offset;
-                    size_t write_samples = (remain > CHUNK_SAMPLES) ? CHUNK_SAMPLES : remain;
+                    size_t write_samples = std::min(total_samples - offset, chunk_samples);
 
                     esp_codec_dev_write(_codec_dev, (void*)&current_data[offset], write_samples * sizeof(int16_t));
                     offset += write_samples;
@@ -226,15 +214,16 @@ private:
 
         i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_PORT, I2S_ROLE_MASTER);
         i2s_std_config_t std_cfg   = {
-            .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
-            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-            .gpio_cfg =
+              .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
+              .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+              .gpio_cfg =
                 {
-                    .mclk = I2S_MCLK_PIN,
-                    .bclk = I2S_BCLK_PIN,
-                    .ws   = I2S_LRCK_PIN,
-                    .dout = I2S_DDAC_OUT_PIN,
-                    .din  = I2S_DADC_IN_PIN,
+                      .mclk         = I2S_MCLK_PIN,
+                      .bclk         = I2S_BCLK_PIN,
+                      .ws           = I2S_LRCK_PIN,
+                      .dout         = I2S_DDAC_OUT_PIN,
+                      .din          = I2S_DADC_IN_PIN,
+                      .invert_flags = {},
                 },
         };
 

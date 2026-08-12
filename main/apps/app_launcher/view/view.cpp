@@ -6,7 +6,6 @@
 #include "view.h"
 #include <mooncake_log.h>
 #include <assets/assets.h>
-#include <functional>
 #include <hal/hal.h>
 #include <cstdint>
 #include <vector>
@@ -185,7 +184,6 @@ private:
     int _icon_gap      = 0;
     int _current_index = 0;
     int _last_index    = 0;
-    bool _is_visible   = false;
 
     std::unique_ptr<Label> _label;
 };
@@ -193,8 +191,7 @@ private:
 static std::string _tag        = "LauncherView";
 static constexpr int _icon_gap = 466;
 // Create 5 copies: [0:Backup] [1:Buffer] [2:Main] [3:Buffer] [4:Backup]
-static constexpr int _loop_copies       = 5;
-static constexpr int _center_copy_index = 2;
+static constexpr int _loop_copies = 5;
 
 static int _last_clicked_icon_pos_x = -1;
 static std::unique_ptr<PageIndicator> _page_indicator;
@@ -202,16 +199,11 @@ static std::unique_ptr<DynamicIconLabel> _dynamic_icon_label;
 
 LauncherView::~LauncherView()
 {
-    _icon_images.clear();
-    _icon_panels.clear();
-    _lr_indicators_images.clear();
-    _lr_indicator_panels.clear();
-    _panel.reset();
     _page_indicator.reset();
     _dynamic_icon_label.reset();
 }
 
-void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
+void LauncherView::init(const std::vector<mooncake::AppProps_t>& appProps)
 {
     mclog::tagInfo(_tag, "init");
 
@@ -241,7 +233,7 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
 
     // Loop multiple times to create fake infinite scroll
     for (int loop = 0; loop < _loop_copies; loop++) {
-        for (const auto& props : appPorps) {
+        for (const auto& props : appProps) {
             // Icon panel
             _icon_panels.push_back(std::make_unique<Container>(_panel->get()));
             _icon_panels.back()->setAlign(LV_ALIGN_CENTER);
@@ -312,7 +304,7 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
 
     /* ------------------------------ Page indicator ---------------------------- */
     _page_indicator = std::make_unique<PageIndicator>();
-    _page_indicator->init(appPorps.size(), _icon_gap, _panel->get(), 0, 200);
+    _page_indicator->init(appProps.size(), _icon_gap, _panel->get(), 0, 200);
 
     /* --------------------------- Dynamic icon label --------------------------- */
     _dynamic_icon_label = std::make_unique<DynamicIconLabel>();
@@ -325,43 +317,16 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
     _clock->addFlag(LV_OBJ_FLAG_FLOATING);
 
     /* ----------------------------- History restore ---------------------------- */
-    bool need_restore      = false;
-    int restore_icon_pos_x = -1;
-
-    // Normal start pos (Center of the repeated sets)
-    int base_offset_rounds = _center_copy_index * appPorps.size();
-    int default_start_x    = base_offset_rounds * _icon_gap;
-
-    // // If warm boot was requested
-    // if (GetHAL().getWarmRebootTarget() >= 0) {
-    //     auto app_index = GetHAL().getWarmRebootTarget();
-    //     mclog::tagInfo(_tag, "warm boot was requested, app index: {}", app_index);
-    //     app_index = uitk::clamp(app_index, 0, static_cast<int>(appPorps.size()) - 1);
-
-    //     // Restore to center set
-    //     restore_icon_pos_x = (base_offset_rounds + app_index) * _icon_gap;
-    //     need_restore       = true;
-    //     GetHAL().clearWarmRebootRequest();
-    // }
-
     if (_last_clicked_icon_pos_x != -1) {
-        // Just restore where they left off, it should be in a valid range
-        // mclog::tagInfo(_tag, "navigate to last clicked icon, pos x: {}", _last_clicked_icon_pos_x);
-        restore_icon_pos_x       = _last_clicked_icon_pos_x;
-        need_restore             = true;
+        _panel->scrollBy(-_last_clicked_icon_pos_x, 0, LV_ANIM_OFF);
+
+        _page_indicator->jumpTo(_last_clicked_icon_pos_x / _icon_gap);
+        _dynamic_icon_label->jumpTo(_last_clicked_icon_pos_x / _icon_gap);
+
+        _state                   = STATE_NORMAL;
         _last_clicked_icon_pos_x = -1;
     }
 
-    if (need_restore) {
-        _panel->scrollBy(-restore_icon_pos_x, 0, LV_ANIM_OFF);
-
-        _page_indicator->jumpTo(restore_icon_pos_x / _icon_gap);
-        _dynamic_icon_label->jumpTo(restore_icon_pos_x / _icon_gap);
-
-        _state = STATE_NORMAL;
-    }
-
-    // Destory boot logo label
     GetHAL().bootLogo.reset();
 }
 
@@ -445,8 +410,6 @@ void LauncherView::handle_scroll_in_loop()
     int current_scroll_x = _panel->getScrollX();
 
     // Define safe zone (Copy 2)
-    int center_set_start_x = _center_copy_index * set_width_px;
-
     // Thresholds: midpoint of Wrap sets
     int left_trigger_limit  = 1 * set_width_px + (set_width_px / 2);  // Middle of Set 1
     int right_trigger_limit = 3 * set_width_px + (set_width_px / 2);  // Middle of Set 3

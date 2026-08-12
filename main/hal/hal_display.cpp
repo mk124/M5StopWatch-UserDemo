@@ -10,6 +10,7 @@
 #include <lgfx/v1/panel/Panel_AMOLED.hpp>
 #include <smooth_ui_toolkit.hpp>
 #include <uitk/short_namespace.hpp>
+#include <algorithm>
 #include <memory>
 
 static const std::string_view _tag = "HAL-Display";
@@ -69,12 +70,6 @@ class M5StopWatch : public M5GFX {
     Panel_CO5300 _panel_instance;
 
 public:
-    M5StopWatch(void)
-    {
-    }
-
-    // static constexpr int in_i2c_port                   = 0;  // I2C_NUM_0
-
     bool init_impl(bool use_reset, bool use_clear) override
     {
         {
@@ -115,41 +110,28 @@ public:
         setPanel(&_panel_instance);
 
         lgfx::pinMode(cfg_pin_te, lgfx::pin_mode_t::input_pullup);
-        // lgfx::i2c::init(in_i2c_port);
-
-        // io_expander.digitalWrite(PY32_L3B_EN_PIN, 1);
-        // io_expander.digitalWrite(PY32_OLED_RST_PIN, 1);
 
         if (!LGFX_Device::init_impl(use_reset, use_clear)) return false;
 
-        enableFrameBuffer(true);
+        if (!enableFrameBuffer()) return false;
 
         _panel_instance.setBrightness(128);
 
         return true;
     }
 
-    bool enableFrameBuffer(bool auto_display = false)
+    bool enableFrameBuffer()
     {
         if (_panel_instance.initPanelFb()) {
             auto fbPanel = _panel_instance.getPanelFb();
             if (fbPanel) {
                 fbPanel->setBus(&_bus_instance);
-                fbPanel->setAutoDisplay(auto_display);
+                fbPanel->setAutoDisplay(true);
                 setPanel(fbPanel);
                 return true;
             }
         }
         return false;
-    }
-
-    void disableFrameBuffer()
-    {
-        auto fbPanel = _panel_instance.getPanelFb();
-        if (fbPanel) {
-            _panel_instance.deinitPanelFb();
-            setPanel(&_panel_instance);
-        }
     }
 
     void setBrightness(uint8_t brightness)
@@ -159,7 +141,6 @@ public:
 };
 
 static std::unique_ptr<M5StopWatch> _display;
-static std::unique_ptr<LGFX_Sprite> _canvas;
 
 void Hal::display_init()
 {
@@ -169,15 +150,8 @@ void Hal::display_init()
     if (!_display->init()) {
         mclog::tagError(_tag, "display init failed");
         _display.reset();
+        return;
     }
-
-    // mclog::tagInfo(_tag, "create full screen canvas");
-    // _canvas = std::make_unique<LGFX_Sprite>(_display.get());
-    // _canvas->setPsram(true);
-    // if (!_canvas->createSprite(_display->width(), _display->height())) {
-    //     mclog::tagError(_tag, "canvas init failed");
-    //     _canvas.reset();
-    // }
 
     // Load brightness from settings
     auto brightness = getBackLightBrightness(true);
@@ -187,16 +161,6 @@ void Hal::display_init()
 LGFX_Device &Hal::getDisplay()
 {
     return *_display;
-}
-
-LGFX_Sprite &Hal::getCanvas()
-{
-    return *_canvas;
-}
-
-void Hal::updateCanvas()
-{
-    _canvas->pushSprite(0, 0);
 }
 
 void Hal::setBackLightBrightness(int brightness, bool saveToSettings)
@@ -261,8 +225,6 @@ Hal::TouchPoint Hal::getTouchPoint()
 /*                                    Lvgl                                    */
 /* -------------------------------------------------------------------------- */
 // https://github.com/m5stack/lv_m5_emulator/blob/main/src/utility/lvgl_port_m5stack.cpp
-#include <cstdlib>  // for aligned_alloc
-#include <cstring>  // for memset
 #include <lvgl.h>
 #include <atomic>
 
@@ -300,25 +262,10 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
     gfx.startWrite();
     gfx.setAddrWindow(area->x1, area->y1, w, h);
 
-    // Critical fix: Use safe pixel writing method to avoid M5GFX SIMD optimizations
-    // Break large transfers into small chunks to avoid problematic copy_rgb_fast function
-    const uint32_t SAFE_CHUNK_SIZE = 8192;  // 8K pixels per chunk, suitable for small buffer settings
-
-    if (pixels > SAFE_CHUNK_SIZE) {
-        // Chunked transmission for large data
-        const lgfx::rgb565_t *src = (const lgfx::rgb565_t *)px_map;
-        uint32_t remaining        = pixels;
-        uint32_t offset           = 0;
-
-        while (remaining > 0) {
-            uint32_t chunk_size = (remaining > SAFE_CHUNK_SIZE) ? SAFE_CHUNK_SIZE : remaining;
-            gfx.writePixels(src + offset, chunk_size);
-            offset += chunk_size;
-            remaining -= chunk_size;
-        }
-    } else {
-        // Direct transmission for small data
-        gfx.writePixels((lgfx::rgb565_t *)px_map, pixels);
+    constexpr uint32_t safe_chunk_size = 8192;
+    const auto *src                    = reinterpret_cast<const lgfx::rgb565_t *>(px_map);
+    for (uint32_t offset = 0; offset < pixels; offset += safe_chunk_size) {
+        gfx.writePixels(src + offset, std::min(safe_chunk_size, pixels - offset));
     }
 
     gfx.endWrite();
@@ -326,10 +273,8 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
     lv_display_flush_ready(disp);
 }
 
-static void lvgl_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
+static void lvgl_read_cb(lv_indev_t *, lv_indev_data_t *data)
 {
-    M5GFX &gfx = *(M5GFX *)lv_indev_get_driver_data(indev);
-
     auto tp = GetHAL().getTouchPoint();
     if (tp.num == 0) {
         data->state = LV_INDEV_STATE_REL;
@@ -366,13 +311,14 @@ void Hal::lvgl_init()
         printf("lv_indev_create failed\n");
         return;
     }
-    lv_indev_set_driver_data(lvTouchpad, _display.get());
     lv_indev_set_type(lvTouchpad, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(lvTouchpad, lvgl_read_cb);
     lv_indev_set_display(lvTouchpad, disp);
 
-    xGuiSemaphore                                     = xSemaphoreCreateMutex();
-    const esp_timer_create_args_t periodic_timer_args = {.callback = &lvgl_tick_timer, .name = "lvgl_tick_timer"};
+    xGuiSemaphore = xSemaphoreCreateMutex();
+    esp_timer_create_args_t periodic_timer_args{};
+    periodic_timer_args.callback = &lvgl_tick_timer;
+    periodic_timer_args.name     = "lvgl_tick_timer";
     esp_timer_handle_t periodic_timer;
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 10 * 1000));
@@ -390,7 +336,7 @@ void Hal::lvgl_init()
 
 bool Hal::lvglLock()
 {
-    return xSemaphoreTake(xGuiSemaphore, portMAX_DELAY) == pdTRUE ? true : false;
+    return xSemaphoreTake(xGuiSemaphore, portMAX_DELAY) == pdTRUE;
 }
 
 void Hal::lvglUnlock()

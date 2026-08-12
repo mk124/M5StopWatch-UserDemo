@@ -165,8 +165,6 @@ public:
 
     // M5GFX
     LGFX_Device& getDisplay();
-    LGFX_Sprite& getCanvas();
-    void updateCanvas();
 
     // Lvgl
     lv_indev_t* lvTouchpad = nullptr;

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #pragma once
-// https://github.com/espressif/esp-idf/tree/v5.5.4/examples/storage/wear_levelling
+// https://github.com/espressif/esp-idf/tree/v6.0.2/examples/storage/wear_levelling
 
 #ifdef __cplusplus
 extern "C" {

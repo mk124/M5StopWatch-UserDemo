@@ -31,7 +31,7 @@ public:
 
     std::function<void(int appID)> onAppClicked;
 
-    void init(std::vector<mooncake::AppProps_t> appPorps);
+    void init(const std::vector<mooncake::AppProps_t>& appProps);
     void update();
 
 private:

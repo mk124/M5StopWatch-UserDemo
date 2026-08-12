@@ -15,10 +15,6 @@ namespace setup_workers {
 
 class PercentageAdjustView;
 
-/**
- * @brief
- *
- */
 class WorkerBase {
 public:
     virtual ~WorkerBase() = default;
@@ -36,10 +32,6 @@ protected:
     bool _is_done = false;
 };
 
-/**
- * @brief
- *
- */
 class BrightnessWorker : public WorkerBase {
 public:
     BrightnessWorker();
@@ -49,13 +41,8 @@ public:
 private:
     std::unique_ptr<PercentageAdjustView> _view;
     int _applied_brightness = 0;
-    bool _save_requested    = false;
 };
 
-/**
- * @brief
- *
- */
 class VolumeWorker : public WorkerBase {
 public:
     VolumeWorker();
@@ -64,14 +51,9 @@ public:
 
 private:
     std::unique_ptr<PercentageAdjustView> _view;
-    int _applied_volume  = 0;
-    bool _save_requested = false;
+    int _applied_volume = 0;
 };
 
-/**
- * @brief
- *
- */
 class ButtonWorker : public WorkerBase {
 public:
     ButtonWorker();
@@ -85,10 +67,6 @@ private:
     Hal::ButtonConfig _applied_config;
 };
 
-/**
- * @brief
- *
- */
 class SetTimeWorker : public WorkerBase {
 public:
     SetTimeWorker();
@@ -102,10 +80,6 @@ private:
     TimeHms _applied_time;
 };
 
-/**
- * @brief
- *
- */
 class SetDateWorker : public WorkerBase {
 public:
     SetDateWorker();
@@ -119,10 +93,6 @@ private:
     DateYmd _applied_date;
 };
 
-/**
- * @brief
- *
- */
 class AboutWorker : public WorkerBase {
 public:
     AboutWorker();

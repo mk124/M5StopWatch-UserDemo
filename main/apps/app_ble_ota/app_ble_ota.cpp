@@ -136,6 +136,11 @@ void AppBleOta::onRunning()
     const auto status = GetHAL().updateBleOta();
 
     GetHAL().updateButtonStates();
+    if (GetHAL().btnA.isHolding() && GetHAL().btnB.isHolding() && GetHAL().cancelBleOta()) {
+        close();
+        return;
+    }
+
     const bool buttonsPressed = GetHAL().btnA.isPressed() && GetHAL().btnB.isPressed();
     if (buttonsPressed && !_buttons_latched) {
         _buttons_latched = true;

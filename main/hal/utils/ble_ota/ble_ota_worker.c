@@ -9,8 +9,8 @@
  *
  * The upstream partition resolution, ring-buffer receive path, OTA task, and
  * esp_ota begin/write/end/set-boot/abort flow are retained. The local lifecycle
- * lets BLE OTA exist only while the StopWatch app is open and checks the app
- * project name before selecting the update partition.
+ * lets BLE OTA exist only while the StopWatch app is open and makes project-name
+ * validation optional.
  */
 
 #include "ble_ota_worker.h"
@@ -67,6 +67,7 @@ typedef struct {
     bool initialized;
     bool ota_open;
     bool compressed;
+    bool check_project_name;
 } ble_ota_worker_context_t;
 
 static ble_ota_worker_context_t s_context;
@@ -185,7 +186,8 @@ static ble_ota_worker_failure_t validate_image_header(const uint8_t *data, size_
         app.magic_word != ESP_APP_DESC_MAGIC_WORD) {
         return BLE_OTA_WORKER_FAILURE_INVALID_IMAGE;
     }
-    if (strncmp(app.project_name, s_context.project_name, sizeof(app.project_name)) != 0) {
+    if (s_context.check_project_name &&
+        strncmp(app.project_name, s_context.project_name, sizeof(app.project_name)) != 0) {
         return BLE_OTA_WORKER_FAILURE_WRONG_PROJECT;
     }
     return BLE_OTA_WORKER_FAILURE_NONE;
@@ -374,7 +376,8 @@ static void ota_task(void *arg)
 
     esp_app_desc_t app = {0};
     if (esp_ota_get_partition_description(s_context.update_partition, &app) != ESP_OK ||
-        strncmp(app.project_name, s_context.project_name, sizeof(app.project_name)) != 0) {
+        (s_context.check_project_name &&
+         strncmp(app.project_name, s_context.project_name, sizeof(app.project_name)) != 0)) {
         set_failure(BLE_OTA_WORKER_FAILURE_WRONG_PROJECT, "application project mismatch");
         goto OTA_DONE;
     }
@@ -425,8 +428,9 @@ esp_err_t ble_ota_worker_init(const ble_ota_worker_config_t *config)
     }
 
     memset(&s_context, 0, sizeof(s_context));
-    s_context.state   = BLE_OTA_WORKER_IDLE;
-    s_context.chip_id = config->chip_id;
+    s_context.state              = BLE_OTA_WORKER_IDLE;
+    s_context.chip_id            = config->chip_id;
+    s_context.check_project_name = true;
     memcpy(s_context.project_name, config->project_name, strlen(config->project_name) + 1);
 
     s_context.lock    = xSemaphoreCreateMutex();
@@ -451,6 +455,21 @@ esp_err_t ble_ota_worker_init(const ble_ota_worker_config_t *config)
     }
     s_context.initialized = true;
     return ESP_OK;
+}
+
+esp_err_t ble_ota_worker_set_project_check(bool enabled)
+{
+    if (!s_context.initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    context_lock();
+    const esp_err_t result = s_context.state == BLE_OTA_WORKER_IDLE ? ESP_OK : ESP_ERR_INVALID_STATE;
+    if (result == ESP_OK) {
+        s_context.check_project_name = enabled;
+    }
+    context_unlock();
+    return result;
 }
 
 bool ble_ota_worker_request_stop(void)

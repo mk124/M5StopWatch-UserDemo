@@ -105,8 +105,14 @@ enum class BleOtaState {
     Error,
 };
 
+enum class BleOtaMode {
+    Update,
+    Install,
+};
+
 struct BleOtaStatus {
     BleOtaState state    = BleOtaState::Advertising;
+    BleOtaMode mode      = BleOtaMode::Update;
     uint32_t transferred = 0;
     uint32_t total       = 0;
     std::string device_name;
@@ -276,6 +282,7 @@ public:
     /* -------------------------------- BLE OTA -------------------------------- */
     void startBleOta();
     BleOtaStatus updateBleOta();
+    bool toggleBleOtaMode();
     bool cancelBleOta();
     void stopBleOta();
 

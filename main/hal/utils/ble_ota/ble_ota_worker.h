@@ -59,6 +59,9 @@ typedef struct {
 /** Initialize the worker, register raw-profile callbacks, and create its task. */
 esp_err_t ble_ota_worker_init(const ble_ota_worker_config_t *config);
 
+/** Enable or disable project-name validation before a transfer starts. */
+esp_err_t ble_ota_worker_set_project_check(bool enabled);
+
 /** Ask the worker to stop. Returns true if the verified image is already selected. */
 bool ble_ota_worker_request_stop(void);
 

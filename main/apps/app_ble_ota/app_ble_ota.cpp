@@ -6,11 +6,12 @@
 
 namespace {
 
-constexpr std::uint32_t RingWaitingColor   = 0xAEB4B8;
-constexpr std::uint32_t RingConnectedColor = 0xF2F2F2;
-constexpr std::uint32_t RingReceivingColor = 0xF0A044;
-constexpr std::uint32_t RingErrorColor     = 0xFF646B;
-constexpr std::uint32_t FadeOutDuration    = 500;
+constexpr std::uint32_t RingUpdateColor         = 0xF2F2F2;
+constexpr std::uint32_t RingInstallColor        = 0x9BBCE0;
+constexpr std::uint32_t RingReceivingColor      = 0xF0A044;
+constexpr std::uint32_t RingErrorColor          = 0xFF646B;
+constexpr std::uint32_t ColorTransitionDuration = 250;
+constexpr std::uint32_t FadeOutDuration         = 500;
 
 void setRingValue(void* ring, std::int32_t value)
 {
@@ -65,7 +66,8 @@ void keepErrorVisible(lv_anim_t* animation)
 
 void pulseError(lv_obj_t* ring)
 {
-    auto animation = makeAnimation(ring, setRingOpacity, LV_OPA_50, LV_OPA_COVER, 140);
+    auto animation =
+        makeAnimation(ring, setRingOpacity, lv_obj_get_style_arc_opa(ring, LV_PART_INDICATOR), LV_OPA_50, 140);
     lv_anim_set_reverse_duration(&animation, 140);
     lv_anim_set_repeat_count(&animation, 1);
     lv_anim_set_completed_cb(&animation, keepErrorVisible);
@@ -100,7 +102,7 @@ void AppBleOta::onOpen()
     _success_started = false;
     _fade_started    = false;
     _fade_complete.store(false, std::memory_order_relaxed);
-    _key_manager = std::make_unique<input::KeyManager>();
+    _buttons_latched = false;
     {
         LvglLockGuard lock;
         _page = std::make_unique<view::LoadingPage>();
@@ -115,13 +117,14 @@ void AppBleOta::onOpen()
         lv_obj_set_style_arc_rounded(_ring, true, LV_PART_MAIN);
         lv_obj_set_style_arc_rounded(_ring, true, LV_PART_INDICATOR);
         lv_obj_set_style_arc_opa(_ring, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_arc_color(_ring, lv_color_hex(RingWaitingColor), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(_ring, lv_color_hex(RingUpdateColor), LV_PART_INDICATOR);
         lv_arc_set_range(_ring, 0, 1000);
         lv_arc_set_bg_angles(_ring, 0, 360);
         lv_arc_set_value(_ring, 1000);
         startBreathing(_ring);
     }
     _ring_state    = BleOtaState::Advertising;
+    _ring_mode     = BleOtaMode::Update;
     _ring_progress = 0;
     show("BLE OTA\n\nStarting...");
 
@@ -132,11 +135,20 @@ void AppBleOta::onRunning()
 {
     const auto status = GetHAL().updateBleOta();
 
-    if (_key_manager && _key_manager->update() == input::KeyEvent::GoHome) {
+    GetHAL().updateButtonStates();
+    const bool buttonsPressed = GetHAL().btnA.isPressed() && GetHAL().btnB.isPressed();
+    if (buttonsPressed && !_buttons_latched) {
+        _buttons_latched = true;
+        if (status.state == BleOtaState::Advertising && GetHAL().toggleBleOtaMode()) {
+            return;
+        }
         if (GetHAL().cancelBleOta()) {
             close();
         }
         return;
+    }
+    if (GetHAL().btnA.isReleased() && GetHAL().btnB.isReleased()) {
+        _buttons_latched = false;
     }
 
     const auto progress =
@@ -144,15 +156,16 @@ void AppBleOta::onRunning()
             ? 0U
             : static_cast<std::uint32_t>(static_cast<std::uint64_t>(status.transferred) * 1000 / status.total);
     const auto percent = progress / 10;
-    updateRing(status.state, progress);
+    updateRing(status.state, status.mode, progress);
 
     std::string message;
+    const char* mode = status.mode == BleOtaMode::Update ? "UPDATE MODE" : "INSTALL MODE";
     switch (status.state) {
         case BleOtaState::Advertising:
-            message = fmt::format("BLE OTA\n\n{}\nWaiting for client...\n\nHold A + B to exit", status.device_name);
+            message = fmt::format("BLE OTA\n\n{}\nWaiting for client...\n\n{}\nA+B  SWITCH", status.device_name, mode);
             break;
         case BleOtaState::Connected:
-            message = "BLE OTA\n\nConnected\nWaiting for firmware...\n\nHold A + B to cancel";
+            message = fmt::format("BLE OTA\n\nConnected\nWaiting for firmware...\n\n{}\nA+B  CANCEL", mode);
             break;
         case BleOtaState::Receiving: {
             const auto now = GetHAL().millis();
@@ -178,8 +191,8 @@ void AppBleOta::onRunning()
                 eta = "00:00";
             }
 
-            message = fmt::format("BLE OTA\n\n{}%\n{} / {} bytes\nETA {}\n\nHold A + B to cancel", percent,
-                                  status.transferred, status.total, eta);
+            message = fmt::format("BLE OTA\n\n{}%\n{} / {} bytes\nETA {}\n\nA+B  CANCEL", percent, status.transferred,
+                                  status.total, eta);
             break;
         }
         case BleOtaState::Verifying:
@@ -201,7 +214,7 @@ void AppBleOta::onRunning()
             return;
         }
         case BleOtaState::Error:
-            message = fmt::format("BLE OTA failed\n\n{}\n\nHold A + B to exit", status.message);
+            message = fmt::format("BLE OTA failed\n\n{}\n\nA+B  EXIT", status.message);
             break;
     }
 
@@ -213,9 +226,8 @@ void AppBleOta::onClose()
     mclog::tagInfo(getAppInfo().name, "on close");
 
     GetHAL().stopBleOta();
-    _key_manager.reset();
-
     LvglLockGuard lock;
+    lv_anim_delete(this, setRingColor);
     lv_obj_delete(_ring);
     _ring = nullptr;
     lv_anim_delete(_page.get(), nullptr);
@@ -223,12 +235,43 @@ void AppBleOta::onClose()
     _message.clear();
 }
 
-void AppBleOta::updateRing(BleOtaState state, std::uint32_t progress)
+void AppBleOta::setRingColor(void* app, std::int32_t mix)
+{
+    auto* self = static_cast<AppBleOta*>(app);
+    lv_obj_set_style_arc_color(self->_ring,
+                               lv_color_mix(lv_color_hex(self->_ring_color_to), lv_color_hex(self->_ring_color_from),
+                                            static_cast<uint8_t>(mix)),
+                               LV_PART_INDICATOR);
+}
+
+void AppBleOta::animateRingColor(std::uint32_t color)
+{
+    lv_anim_delete(this, setRingColor);
+    _ring_color_from = lv_color_to_u32(lv_obj_get_style_arc_color(_ring, LV_PART_INDICATOR)) & 0xFFFFFF;
+    _ring_color_to   = color;
+    if (_ring_color_from == _ring_color_to) {
+        return;
+    }
+
+    auto animation = makeAnimation(this, setRingColor, 0, LV_OPA_COVER, ColorTransitionDuration);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in_out);
+    lv_anim_start(&animation);
+}
+
+void AppBleOta::updateRing(BleOtaState state, BleOtaMode mode, std::uint32_t progress)
 {
     const bool stateChanged  = state != _ring_state;
+    const bool modeChanged   = mode != _ring_mode;
     const bool sameAnimation = _ring_state == BleOtaState::Verifying && state == BleOtaState::Success;
     if (sameAnimation) {
         _ring_state = state;
+        _ring_mode  = mode;
+        return;
+    }
+    if (!stateChanged && modeChanged) {
+        LvglLockGuard lock;
+        animateRingColor(mode == BleOtaMode::Install ? RingInstallColor : RingUpdateColor);
+        _ring_mode = mode;
         return;
     }
     if (!stateChanged && (state != BleOtaState::Receiving || progress == _ring_progress)) {
@@ -237,31 +280,34 @@ void AppBleOta::updateRing(BleOtaState state, std::uint32_t progress)
 
     LvglLockGuard lock;
     if (stateChanged) {
+        const auto opacity = lv_obj_get_style_arc_opa(_ring, LV_PART_INDICATOR);
         lv_anim_delete(_ring, nullptr);
         lv_arc_set_rotation(_ring, 270);
         lv_obj_set_style_arc_opa(_ring, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_arc_color(_ring, lv_color_hex(RingWaitingColor), LV_PART_INDICATOR);
-        lv_obj_set_style_arc_opa(_ring, LV_OPA_COVER, LV_PART_INDICATOR);
 
         switch (state) {
             case BleOtaState::Advertising:
+                animateRingColor(mode == BleOtaMode::Install ? RingInstallColor : RingUpdateColor);
+                lv_obj_set_style_arc_opa(_ring, LV_OPA_COVER, LV_PART_INDICATOR);
                 lv_arc_set_value(_ring, 1000);
                 startBreathing(_ring);
                 break;
             case BleOtaState::Connected: {
-                lv_obj_set_style_arc_color(_ring, lv_color_hex(RingConnectedColor), LV_PART_INDICATOR);
+                animateRingColor(mode == BleOtaMode::Install ? RingInstallColor : RingUpdateColor);
                 lv_arc_set_value(_ring, 1000);
-                auto animation = makeAnimation(_ring, setRingOpacity, LV_OPA_50, LV_OPA_COVER, 180);
+                auto animation = makeAnimation(_ring, setRingOpacity, opacity, LV_OPA_COVER, 180);
                 lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
                 lv_anim_start(&animation);
                 break;
             }
             case BleOtaState::Receiving: {
-                lv_obj_set_style_arc_color(_ring, lv_color_hex(RingConnectedColor), LV_PART_MAIN);
-                lv_obj_set_style_arc_opa(_ring, LV_OPA_COVER, LV_PART_MAIN);
+                lv_anim_delete(this, setRingColor);
+                lv_obj_set_style_arc_color(_ring, lv_obj_get_style_arc_color(_ring, LV_PART_INDICATOR), LV_PART_MAIN);
+                lv_obj_set_style_arc_opa(_ring, opacity, LV_PART_MAIN);
                 lv_obj_set_style_arc_color(_ring, lv_color_hex(RingReceivingColor), LV_PART_INDICATOR);
+                lv_obj_set_style_arc_opa(_ring, LV_OPA_COVER, LV_PART_INDICATOR);
                 lv_arc_set_value(_ring, 0);
-                auto fade = makeAnimation(_ring, setBaseOpacity, LV_OPA_COVER, LV_OPA_TRANSP, 300);
+                auto fade = makeAnimation(_ring, setBaseOpacity, opacity, LV_OPA_TRANSP, 300);
                 lv_anim_set_path_cb(&fade, lv_anim_path_ease_out);
                 lv_anim_start(&fade);
                 animateProgress(_ring, progress);
@@ -269,12 +315,14 @@ void AppBleOta::updateRing(BleOtaState state, std::uint32_t progress)
             }
             case BleOtaState::Verifying:
             case BleOtaState::Success:
+                lv_anim_delete(this, setRingColor);
                 lv_obj_set_style_arc_color(_ring, lv_color_hex(RingReceivingColor), LV_PART_INDICATOR);
+                lv_obj_set_style_arc_opa(_ring, LV_OPA_COVER, LV_PART_INDICATOR);
                 lv_arc_set_value(_ring, 1000);
                 startBreathing(_ring);
                 break;
             case BleOtaState::Error:
-                lv_obj_set_style_arc_color(_ring, lv_color_hex(RingErrorColor), LV_PART_INDICATOR);
+                animateRingColor(RingErrorColor);
                 lv_arc_set_value(_ring, 1000);
                 pulseError(_ring);
                 break;
@@ -285,6 +333,7 @@ void AppBleOta::updateRing(BleOtaState state, std::uint32_t progress)
     }
 
     _ring_state    = state;
+    _ring_mode     = mode;
     _ring_progress = progress;
 }
 

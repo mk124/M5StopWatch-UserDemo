@@ -1,5 +1,4 @@
 #pragma once
-#include <apps/common/key_manager/key_manager.h>
 #include <apps/common/loading_page/loading_page.h>
 #include <mooncake.h>
 #include <atomic>
@@ -8,6 +7,7 @@
 #include <string>
 
 enum class BleOtaState;
+enum class BleOtaMode;
 
 class AppBleOta : public mooncake::AppAbility {
 public:
@@ -21,14 +21,19 @@ public:
 private:
     void fadeOut();
     void show(std::string message);
-    void updateRing(BleOtaState state, std::uint32_t progress);
+    void animateRingColor(std::uint32_t color);
+    static void setRingColor(void* app, std::int32_t mix);
+    void updateRing(BleOtaState state, BleOtaMode mode, std::uint32_t progress);
 
-    std::unique_ptr<input::KeyManager> _key_manager;
     std::unique_ptr<view::LoadingPage> _page;
     lv_obj_t* _ring = nullptr;
     std::string _message;
     BleOtaState _ring_state;
+    BleOtaMode _ring_mode;
     std::uint32_t _ring_progress   = 0;
+    std::uint32_t _ring_color_from = 0;
+    std::uint32_t _ring_color_to   = 0;
+    bool _buttons_latched          = false;
     bool _eta_started              = false;
     std::uint32_t _eta_start_tick  = 0;
     std::uint32_t _eta_update_tick = 0;

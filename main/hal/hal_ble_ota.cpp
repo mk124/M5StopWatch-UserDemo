@@ -155,6 +155,22 @@ public:
         return canceled;
     }
 
+    bool toggleMode()
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_status.state != BleOtaState::Advertising || _stop_requested || !_worker_initialized) {
+            return false;
+        }
+
+        const auto mode = _status.mode == BleOtaMode::Update ? BleOtaMode::Install : BleOtaMode::Update;
+        if (ble_ota_worker_set_project_check(mode == BleOtaMode::Update) != ESP_OK) {
+            return false;
+        }
+        _status.mode = mode;
+        touchLocked();
+        return true;
+    }
+
 private:
     static uint64_t nowMs()
     {
@@ -376,6 +392,11 @@ BleOtaStatus Hal::updateBleOta()
         return session->update();
     }
     return {};
+}
+
+bool Hal::toggleBleOtaMode()
+{
+    return session != nullptr && session->toggleMode();
 }
 
 bool Hal::cancelBleOta()

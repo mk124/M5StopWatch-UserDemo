@@ -86,7 +86,7 @@ void animateProgress(lv_obj_t* ring, std::uint32_t progress)
 AppBleOta::AppBleOta()
 {
     setAppInfo().name = "BLE OTA";
-    setAppInfo().icon = (void*)&icon_fft;
+    setAppInfo().icon = (void*)&icon_ble_ota;
 }
 
 void AppBleOta::onCreate()

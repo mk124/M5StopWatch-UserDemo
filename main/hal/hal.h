@@ -96,6 +96,23 @@ struct DateYmd {
     }
 };
 
+enum class BleOtaState {
+    Advertising,
+    Connected,
+    Receiving,
+    Verifying,
+    Success,
+    Error,
+};
+
+struct BleOtaStatus {
+    BleOtaState state    = BleOtaState::Advertising;
+    uint32_t transferred = 0;
+    uint32_t total       = 0;
+    std::string device_name;
+    std::string message;
+};
+
 /**
  * @brief
  *
@@ -254,6 +271,12 @@ public:
     bool loadNextBadgeImage(lv_obj_t* image);
     bool loadPreviousBadgeImage(lv_obj_t* image);
     void startBadgeEditModeViaAp(std::function<void(std::string_view)> onLog);
+
+    /* -------------------------------- BLE OTA -------------------------------- */
+    void startBleOta();
+    BleOtaStatus updateBleOta();
+    bool cancelBleOta();
+    void stopBleOta();
 
     /* ---------------------------------- Guide --------------------------------- */
     bool shouldShowGuide();

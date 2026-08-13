@@ -15,6 +15,37 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 3.2.2
+  espressif/ble_conn_mgr:
+    component_hash: 4edfb961659fb1eec522acca3fa8826e04a7090f29021a354b92f33a86141cc9
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.2.0
+  espressif/ble_ota_raw:
+    component_hash: f10799e1446cd80d814f5cb809f3e5479cc9bb3f0bc7e5084f53cd1328546d7c
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.0
+  espressif/ble_services:
+    component_hash: 4e0b9da2fe45053227f76cd69fa7be399ae42a1470d6815ae7cc01e7b236c8d3
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.4.0
   espressif/cjson:
     component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
     dependencies:
@@ -69,17 +100,31 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.5.2
+  espressif/xz:
+    component_hash: ec4637fa36a1e262f2da683010d66dbbf87831feff0eaf0ccc1a1d7476512f54
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0
   idf:
     source:
       type: idf
     version: 6.0.2
 direct_dependencies:
 - 78/esp-wifi-connect
+- espressif/ble_conn_mgr
+- espressif/ble_ota_raw
+- espressif/ble_services
 - espressif/cmake_utilities
 - espressif/esp-dsp
 - espressif/esp_codec_dev
 - espressif/i2c_bus
+- espressif/xz
 - idf
-manifest_hash: 711f8c1ffa264457828aa9a3fdd6772d22524afa1b2fb39112f3f6227dc006d4
+manifest_hash: 678f7e1fa1980c23d8d3cfa1d4433fdb227b4cd4424dc860f3ae4ea7daecebde
 target: esp32s3
 version: 3.0.0

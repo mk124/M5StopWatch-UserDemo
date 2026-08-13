@@ -1,0 +1,75 @@
+#!/bin/sh
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_dir=$(CDPATH= cd -- "$tool_dir/.." && pwd)
+
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)
+        platform=macos-arm64
+        ;;
+    Linux-x86_64)
+        platform=linux-x86_64
+        ;;
+    *)
+        echo "m5ota: no binary for $(uname -s) $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+
+cache_root="$project_dir/.cache/m5ota"
+current="$cache_root/current"
+latest=$(curl -fsSIL -o /dev/null -w '%{url_effective}' \
+    https://github.com/mk124/m5ota/releases/latest 2>/dev/null || true)
+
+case "$latest" in
+    https://github.com/mk124/m5ota/releases/tag/*) version=${latest##*/} ;;
+    *)
+        if [ ! -f "$current" ]; then
+            echo "m5ota: could not find the latest release" >&2
+            exit 1
+        fi
+        version=$(cat "$current")
+        echo "m5ota: using cached $version" >&2
+        ;;
+esac
+
+asset="m5ota-$version-$platform.tar.gz"
+cache_dir="$cache_root/$version"
+binary="$cache_dir/m5ota"
+
+if [ ! -x "$binary" ]; then
+    archive="$cache_dir/$asset"
+    checksums="$cache_dir/SHA256SUMS"
+    temporary="$binary.tmp"
+    mkdir -p "$cache_dir"
+    rm -f "$archive" "$checksums" "$temporary"
+
+    echo "Downloading m5ota $version..."
+    release="https://github.com/mk124/m5ota/releases/download/$version"
+    curl -fL "$release/SHA256SUMS" -o "$checksums"
+    checksum=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums")
+    if [ -z "$checksum" ]; then
+        echo "m5ota: $asset is missing from SHA256SUMS" >&2
+        exit 1
+    fi
+    curl -fL "$release/$asset" -o "$archive"
+
+    case "$(uname -s)" in
+        Darwin) actual=$(shasum -a 256 "$archive" | awk '{print $1}') ;;
+        Linux) actual=$(sha256sum "$archive" | awk '{print $1}') ;;
+    esac
+    if [ "$actual" != "$checksum" ]; then
+        rm -f "$archive"
+        echo "m5ota: checksum mismatch for $asset" >&2
+        exit 1
+    fi
+
+    tar -xOzf "$archive" m5ota > "$temporary"
+    chmod +x "$temporary"
+    mv "$temporary" "$binary"
+    rm -f "$archive" "$checksums"
+fi
+
+printf '%s\n' "$version" > "$current"
+exec "$binary" "$@"

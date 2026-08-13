@@ -37,6 +37,7 @@ extern "C" void app_main(void)
     GetMooncake().installApp(std::make_unique<AppImu>());
     GetMooncake().installApp(std::make_unique<AppFft>());
     GetMooncake().installApp(std::make_unique<AppLuckyWheel>());
+    GetMooncake().installApp(std::make_unique<AppBleOta>());
     GetMooncake().installApp(std::make_unique<AppSetup>());
     // GetMooncake().installApp(std::make_unique<AppTemplate>());
 

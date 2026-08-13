@@ -36,6 +36,11 @@ public:
         _msg->setText(msg);
     }
 
+    void setMessageOpacity(lv_opa_t opacity)
+    {
+        _msg->setOpa(opacity);
+    }
+
 private:
     std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
     std::unique_ptr<uitk::lvgl_cpp::Label> _msg;

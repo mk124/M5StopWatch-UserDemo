@@ -7,3 +7,7 @@ dependencies:
   espressif/i2c_bus: ^1.5.2
   espressif/esp-dsp: ^1.8.2
   78/esp-wifi-connect: 3.2.2
+  espressif/ble_ota_raw: 0.2.0
+  espressif/ble_services: 1.4.0
+  espressif/ble_conn_mgr: 1.2.0
+  espressif/xz: 1.1.0

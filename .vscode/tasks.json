@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "BLE Flash",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "BLE Flash: Build",
+                "BLE Flash: Upload"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "BLE Flash: Build",
+            "type": "esp-idf",
+            "command": "build"
+        },
+        {
+            "label": "BLE Flash: Upload",
+            "type": "shell",
+            "command": "${workspaceFolder}/tools/m5ota",
+            "args": [
+                "${workspaceFolder}/build/StopWatch-UserDemo.bin"
+            ],
+            "windows": {
+                "command": "powershell",
+                "args": [
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "${workspaceFolder}\\tools\\m5ota.ps1",
+                    "${workspaceFolder}\\build\\StopWatch-UserDemo.bin"
+                ]
+            },
+            "problemMatcher": []
+        }
+    ]
+}

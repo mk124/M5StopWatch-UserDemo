@@ -59,11 +59,14 @@ void Hal::updateButtonStates()
 void Hal::setButtonConfig(ButtonConfig config, bool saveToSettings)
 {
     _btn_config = config;
+    setPowerLed(config.powerLedEnabled);
     if (saveToSettings) {
         Settings settings(std::string(Hal::SettingsNs), true);
         settings.SetBool("btn_sfx", config.sfxEnabled);
         settings.SetBool("btn_vibrate", config.vibrateEnabled);
-        mclog::tagInfo(_tag, "config saved to settings: sfx={}, vibrate={}", config.sfxEnabled, config.vibrateEnabled);
+        settings.SetBool("pwr_led", config.powerLedEnabled);
+        mclog::tagInfo(_tag, "config saved to settings: sfx={}, vibrate={}, power led={}", config.sfxEnabled,
+                       config.vibrateEnabled, config.powerLedEnabled);
     }
 }
 
@@ -71,10 +74,12 @@ const Hal::ButtonConfig& Hal::getButtonConfig(bool loadFromSettings)
 {
     if (loadFromSettings) {
         Settings settings(std::string(Hal::SettingsNs), false);
-        _btn_config.sfxEnabled     = settings.GetBool("btn_sfx", true);
-        _btn_config.vibrateEnabled = settings.GetBool("btn_vibrate", true);
-        mclog::tagInfo(_tag, "config loaded from settings: sfx={}, vibrate={}", _btn_config.sfxEnabled,
-                       _btn_config.vibrateEnabled);
+        _btn_config.sfxEnabled      = settings.GetBool("btn_sfx", true);
+        _btn_config.vibrateEnabled  = settings.GetBool("btn_vibrate", true);
+        _btn_config.powerLedEnabled = settings.GetBool("pwr_led", true);
+        setPowerLed(_btn_config.powerLedEnabled);
+        mclog::tagInfo(_tag, "config loaded from settings: sfx={}, vibrate={}, power led={}", _btn_config.sfxEnabled,
+                       _btn_config.vibrateEnabled, _btn_config.powerLedEnabled);
     }
     return _btn_config;
 }

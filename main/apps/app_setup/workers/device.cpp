@@ -143,10 +143,12 @@ public:
         _panel->setBgOpa(LV_OPA_COVER);
         _panel->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
 
-        createSwitchRow(88, "Button SFX", _current_config.sfxEnabled,
+        createSwitchRow(60, "Button SFX", _current_config.sfxEnabled,
                         [this](bool enabled) { _current_config.sfxEnabled = enabled; });
-        createSwitchRow(195, "Button Vibration", _current_config.vibrateEnabled,
+        createSwitchRow(150, "Button Vibration", _current_config.vibrateEnabled,
                         [this](bool enabled) { _current_config.vibrateEnabled = enabled; });
+        createSwitchRow(240, "Power LED", _current_config.powerLedEnabled,
+                        [this](bool enabled) { _current_config.powerLedEnabled = enabled; });
 
         _ok_button = std::make_unique<Button>(_panel->get());
         _ok_button->align(LV_ALIGN_CENTER, 0, 175);
@@ -178,7 +180,7 @@ private:
     void createSwitchRow(int y, const char* title, bool initialValue, const std::function<void(bool)>& onChanged)
     {
         auto row = std::make_unique<Container>(_panel->get());
-        row->setSize(374, 119);
+        row->setSize(374, 80);
         row->align(LV_ALIGN_TOP_MID, 0, y);
         row->setBorderWidth(0);
         row->setShadowWidth(0);
@@ -284,7 +286,8 @@ ButtonWorker::ButtonWorker()
 void ButtonWorker::update()
 {
     if (_applied_config.sfxEnabled != _view->currentConfig().sfxEnabled ||
-        _applied_config.vibrateEnabled != _view->currentConfig().vibrateEnabled) {
+        _applied_config.vibrateEnabled != _view->currentConfig().vibrateEnabled ||
+        _applied_config.powerLedEnabled != _view->currentConfig().powerLedEnabled) {
         GetHAL().setButtonConfig(_view->currentConfig(), false);
         _applied_config = _view->currentConfig();
     }

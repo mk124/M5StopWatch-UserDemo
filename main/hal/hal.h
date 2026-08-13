@@ -258,8 +258,9 @@ public:
     m5::Button_Class btnPwr;
 
     struct ButtonConfig {
-        bool sfxEnabled     = true;
-        bool vibrateEnabled = true;
+        bool sfxEnabled      = true;
+        bool vibrateEnabled  = true;
+        bool powerLedEnabled = true;
     };
 
     void updateButtonStates();
@@ -295,6 +296,7 @@ private:
     void i2c_detect();
     void pmic_init();
     bool pmic_get_pwr_btn_state();
+    void setPowerLed(bool enabled);
     void ioe_init();
     void ioe_tp_reset();
     void ioe_speaker_enable(bool enable);
